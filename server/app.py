@@ -269,7 +269,13 @@ async def baseline():
 
 # ─── Main entry point ────────────────────────────────────────────────────────
 
-if __name__ == "__main__":
+
+def main():
+    """Entry point for the server, callable via `python -m server.app` or project scripts."""
     import uvicorn
     port = int(os.environ.get("PORT", 7860))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
+
+if __name__ == "__main__":
+    main()
