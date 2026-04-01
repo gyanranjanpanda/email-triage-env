@@ -1,0 +1,63 @@
+name: email_triage_env
+version: "1.0.0"
+description: >
+  An OpenEnv-compliant environment for training AI agents on email triage
+  and response tasks. Agents must classify emails by category and priority,
+  decide whether to respond, draft appropriate responses with correct tone,
+  and determine when to escalate. Includes 3 difficulty levels (easy, medium,
+  hard) with automated graders scoring 0.0-1.0.
+
+author: "OpenEnv Hackathon Participant"
+license: "BSD-3-Clause"
+
+environment:
+  type: "email_triage"
+  domain: "business_operations"
+  
+  tasks:
+    - id: easy_triage
+      name: "Basic Email Triage"
+      difficulty: easy
+      description: "Classify and respond to 5 straightforward emails"
+    - id: medium_triage
+      name: "Intermediate Email Triage"
+      difficulty: medium
+      description: "Process 7 emails with ambiguous cases and complaints"
+    - id: hard_triage
+      name: "Advanced Email Triage"
+      difficulty: hard
+      description: "Handle 10 emails with legal, PR, and high-stakes scenarios"
+
+  action_space:
+    type: object
+    fields:
+      email_id: { type: string, required: true }
+      category: { type: string, enum: [urgent_bug, feature_request, billing, general_inquiry, spam, complaint, partnership, internal], required: true }
+      priority: { type: string, enum: [critical, high, medium, low], required: true }
+      response_draft: { type: string, required: false }
+      response_tone: { type: string, enum: [formal, friendly, apologetic, neutral], required: false }
+      should_respond: { type: boolean, required: false }
+      escalate: { type: boolean, required: false }
+      tags: { type: array, items: string, required: false }
+
+  observation_space:
+    type: object
+    fields:
+      emails: { type: array, description: "List of emails to process" }
+      processed_count: { type: integer }
+      total_emails: { type: integer }
+      current_score: { type: float }
+      feedback: { type: string }
+      done: { type: boolean }
+      reward: { type: float }
+      metadata: { type: object }
+
+server:
+  framework: fastapi
+  entrypoint: server/app.py
+  port: 7860
+  health_endpoint: /health
+
+docker:
+  base_image: python:3.11-slim
+  dockerfile: Dockerfile
