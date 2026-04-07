@@ -130,8 +130,9 @@ def run_direct():
     results = {}
 
     for task_id in ["easy_triage", "medium_triage", "hard_triage"]:
-        print(f"\n  Running {task_id}...")
+        print(f"[START] task={task_id}", flush=True)
         obs = env.reset(task_id=task_id)
+        step_num = 0
 
         for email in obs.emails:
             action_dict = llm_process_email(
@@ -142,11 +143,15 @@ def run_direct():
             )
             action = TriageAction(**action_dict)
             obs = env.step(action)
-            print(f"    {email.id}: cat={action_dict['category']} pri={action_dict['priority']} reward={obs.reward:.3f}")
+            step_num += 1
+            print(f"[STEP] step={step_num} reward={obs.reward}", flush=True)
 
         grader_result = env.get_grader_result()
+        task_score = grader_result["score"]
+        print(f"[END] task={task_id} score={task_score} steps={step_num}", flush=True)
+
         results[task_id] = {
-            "score": grader_result["score"],
+            "score": task_score,
             "difficulty": task_id.replace("_triage", ""),
             "emails_processed": grader_result["emails_graded"],
             "emails_expected": grader_result["emails_expected"],
@@ -175,10 +180,11 @@ def run_against_server(base_url: str):
     results = {}
 
     for task_id in ["easy_triage", "medium_triage", "hard_triage"]:
-        print(f"\n  Running {task_id}...")
+        print(f"[START] task={task_id}", flush=True)
         resp = http_client.post("/reset", json={"task_id": task_id})
         resp.raise_for_status()
         obs = resp.json()
+        step_num = 0
 
         for email in obs["emails"]:
             action_dict = llm_process_email(
@@ -190,14 +196,17 @@ def run_against_server(base_url: str):
             step_resp = http_client.post("/step", json=action_dict)
             step_resp.raise_for_status()
             step_data = step_resp.json()
-            print(f"    {email['id']}: cat={action_dict['category']} pri={action_dict['priority']} reward={step_data['reward']:.3f}")
+            step_num += 1
+            print(f"[STEP] step={step_num} reward={step_data['reward']}", flush=True)
 
         grader_resp = http_client.post("/grader")
         grader_resp.raise_for_status()
         grader_result = grader_resp.json()
+        task_score = grader_result["score"]
+        print(f"[END] task={task_id} score={task_score} steps={step_num}", flush=True)
 
         results[task_id] = {
-            "score": grader_result["score"],
+            "score": task_score,
             "difficulty": task_id.replace("_triage", ""),
             "emails_processed": grader_result["emails_graded"],
             "emails_expected": grader_result["emails_expected"],
@@ -224,39 +233,39 @@ def main():
     )
     args = parser.parse_args()
 
-    print("=" * 60)
-    print("  Email Triage Environment — LLM Inference")
-    print("=" * 60)
-    print(f"  API_BASE_URL: {API_BASE_URL}")
-    print(f"  MODEL_NAME:   {MODEL_NAME}")
-    print(f"  API_KEY:      {'***' + API_KEY[-4:] if len(API_KEY) > 4 else '(not set)'}")
+    print("=" * 60, flush=True)
+    print("  Email Triage Environment — LLM Inference", flush=True)
+    print("=" * 60, flush=True)
+    print(f"  API_BASE_URL: {API_BASE_URL}", flush=True)
+    print(f"  MODEL_NAME:   {MODEL_NAME}", flush=True)
+    print(f"  API_KEY:      {'***' + API_KEY[-4:] if len(API_KEY) > 4 else '(not set)'}", flush=True)
 
     if args.server:
-        print(f"\n  Mode: HTTP (server={args.server})")
+        print(f"\n  Mode: HTTP (server={args.server})", flush=True)
         results = run_against_server(args.server)
     else:
-        print("\n  Mode: Direct (no server)")
+        print("\n  Mode: Direct (no server)", flush=True)
         results = run_direct()
 
-    print("\n" + json.dumps(results, indent=2))
+    print("\n" + json.dumps(results, indent=2), flush=True)
 
-    print("\n" + "=" * 60)
-    print("  Baseline Scores")
-    print("=" * 60)
+    print("\n" + "=" * 60, flush=True)
+    print("  Baseline Scores", flush=True)
+    print("=" * 60, flush=True)
     for task, score in results["summary"].items():
         bar = "█" * int(score * 40) + "░" * (40 - int(score * 40))
-        print(f"  {task:8s} │ {bar} │ {score:.4f}")
-    print("=" * 60)
+        print(f"  {task:8s} │ {bar} │ {score:.4f}", flush=True)
+    print("=" * 60, flush=True)
 
     avg = sum(results["summary"].values()) / len(results["summary"])
-    print(f"  Average: {avg:.4f}")
-    print()
+    print(f"  Average: {avg:.4f}", flush=True)
+    print(flush=True)
 
     for task, score in results["summary"].items():
         assert 0.0 <= score <= 1.0, f"Score out of range for {task}: {score}"
 
-    print("✓ All scores in valid range [0.0, 1.0]")
-    print("✓ Inference complete")
+    print("✓ All scores in valid range [0.0, 1.0]", flush=True)
+    print("✓ Inference complete", flush=True)
 
 
 if __name__ == "__main__":
