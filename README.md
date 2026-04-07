@@ -1,3 +1,12 @@
+---
+title: Email Triage Environment
+emoji: 📧
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+---
+
 # Email Triage & Response Environment
 
 An [OpenEnv](https://github.com/meta-pytorch/OpenEnv)-compliant reinforcement learning environment that simulates real-world email triage and response tasks. AI agents learn to classify, prioritize, and respond to emails across increasing difficulty levels.
