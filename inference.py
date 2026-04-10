@@ -1,24 +1,22 @@
 #!/usr/bin/env python3
 """
-Inference script for the Email Triage Environment.
+Inference script for the Email Triage Environment (OpenEnv Hackathon).
 
-Uses the OpenAI API client to run an LLM-based agent against the environment.
-Reads API credentials from environment variables:
+Uses the OpenAI API client to run an LLM-based agent against the environment server.
+
+Required environment variables:
   - API_BASE_URL: The API endpoint for the LLM (default: https://router.huggingface.co/v1)
-  - MODEL_NAME: The model identifier for inference
-  - HF_TOKEN / OPENAI_API_KEY: Your API key
+  - MODEL_NAME:   The model identifier for inference (default: meta-llama/Llama-3.1-8B-Instruct)
+  - HF_TOKEN:     Your Hugging Face API token (mandatory)
 
-Usage:
-  # Direct mode (default):
-  python inference.py
-
-  # Server mode:
-  python inference.py --server http://localhost:7860
+Output format (OpenEnv spec):
+  [START] task=<task_name> env=<benchmark> model=<model_name>
+  [STEP]  step=<n> action=<action_str> reward=<0.00> done=<true|false> error=<msg|null>
+  [END]   success=<true|false> steps=<n> rewards=<r1,r2,...,rn>
 """
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import sys
@@ -27,12 +25,19 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from openai import OpenAI
 
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME = os.environ.get("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
-API_KEY = os.environ.get("HF_TOKEN") or os.environ.get("OPENAI_API_KEY", "")
+# ─── Environment Variables ────────────────────────────────────────────────────
 
-client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
+if HF_TOKEN is None:
+    raise ValueError("HF_TOKEN environment variable is required")
+
+client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+
+
+# ─── System Prompt ────────────────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """You are an expert email triage agent. For each email, you must classify it and decide how to handle it.
 
@@ -66,7 +71,7 @@ Escalation: Set to true for critical priority items or legal/PR-sensitive situat
 Response tone: Use apologetic for complaints/bugs, formal for partnerships/legal, friendly for features/inquiries."""
 
 
-def llm_process_email(email_id: str, subject: str, body: str, sender: str) -> dict:
+def llm_triage_email(email_id: str, subject: str, body: str, sender: str) -> dict:
     """Use the OpenAI-compatible LLM to triage a single email."""
     user_message = f"""Triage this email:
 
@@ -108,7 +113,6 @@ Respond with JSON only."""
         }
     except Exception as exc:
         # Fallback to safe defaults on LLM failure
-        print(f"  [WARN] LLM call failed for {email_id}: {exc}. Using fallback.")
         return {
             "email_id": email_id,
             "category": "general_inquiry",
@@ -121,55 +125,79 @@ Respond with JSON only."""
         }
 
 
+def _format_bool(val: bool) -> str:
+    """Format a boolean as lowercase string per OpenEnv spec."""
+    return "true" if val else "false"
+
+
 def run_direct():
     """Run LLM-based agent directly against the environment (no server)."""
     from server.environment import EmailTriageEnvironment
     from models import TriageAction
 
     env = EmailTriageEnvironment()
-    results = {}
 
     for task_id in ["easy_triage", "medium_triage", "hard_triage"]:
-        print(f"[START] task={task_id}", flush=True)
+        # ── [START] ──
+        print(
+            f"[START] task={task_id} env=email_triage model={MODEL_NAME}",
+            flush=True,
+        )
+
         obs = env.reset(task_id=task_id)
         step_num = 0
+        rewards: list[float] = []
+        last_error = None
+        episode_done = False
 
-        for email in obs.emails:
-            action_dict = llm_process_email(
-                email_id=email.id,
-                subject=email.subject,
-                body=email.body,
-                sender=email.sender,
-            )
-            action = TriageAction(**action_dict)
-            obs = env.step(action)
+        try:
+            for email in obs.emails:
+                action_dict = llm_triage_email(
+                    email_id=email.id,
+                    subject=email.subject,
+                    body=email.body,
+                    sender=email.sender,
+                )
+
+                action = TriageAction(**action_dict)
+                obs = env.step(action)
+                step_num += 1
+
+                reward = round(obs.reward, 2)
+                rewards.append(reward)
+                episode_done = obs.done
+
+                # Represent the action as a compact string
+                action_str = f"triage(email_id='{action.email_id}',category='{action.category}',priority='{action.priority}')"
+
+                # ── [STEP] ──
+                print(
+                    f"[STEP] step={step_num} action={action_str} "
+                    f"reward={reward:.2f} done={_format_bool(episode_done)} "
+                    f"error=null",
+                    flush=True,
+                )
+
+        except Exception as exc:
+            last_error = str(exc)
             step_num += 1
-            print(f"[STEP] step={step_num} reward={obs.reward}", flush=True)
+            rewards.append(0.00)
+            action_str = "error"
+            print(
+                f"[STEP] step={step_num} action={action_str} "
+                f"reward=0.00 done=true "
+                f"error={last_error}",
+                flush=True,
+            )
 
-        grader_result = env.get_grader_result()
-        task_score = grader_result["score"]
-        print(f"[END] task={task_id} score={task_score} steps={step_num}", flush=True)
-
-        results[task_id] = {
-            "score": task_score,
-            "difficulty": task_id.replace("_triage", ""),
-            "emails_processed": grader_result["emails_graded"],
-            "emails_expected": grader_result["emails_expected"],
-            "per_email_scores": [
-                {"email_id": e["email_id"], "score": e.get("total_reward", 0.0)}
-                for e in grader_result.get("per_email", [])
-            ],
-        }
-
-    return {
-        "baseline": "llm_openai_agent",
-        "results": results,
-        "summary": {
-            "easy": results["easy_triage"]["score"],
-            "medium": results["medium_triage"]["score"],
-            "hard": results["hard_triage"]["score"],
-        },
-    }
+        # ── [END] ──
+        success = episode_done and last_error is None
+        rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+        print(
+            f"[END] success={_format_bool(success)} steps={step_num} "
+            f"rewards={rewards_str}",
+            flush=True,
+        )
 
 
 def run_against_server(base_url: str):
@@ -177,95 +205,92 @@ def run_against_server(base_url: str):
     import httpx
 
     http_client = httpx.Client(base_url=base_url, timeout=30.0)
-    results = {}
 
     for task_id in ["easy_triage", "medium_triage", "hard_triage"]:
-        print(f"[START] task={task_id}", flush=True)
+        # ── [START] ──
+        print(
+            f"[START] task={task_id} env=email_triage model={MODEL_NAME}",
+            flush=True,
+        )
+
         resp = http_client.post("/reset", json={"task_id": task_id})
         resp.raise_for_status()
         obs = resp.json()
         step_num = 0
+        rewards: list[float] = []
+        last_error = None
+        episode_done = False
 
-        for email in obs["emails"]:
-            action_dict = llm_process_email(
-                email_id=email["id"],
-                subject=email["subject"],
-                body=email["body"],
-                sender=email["sender"],
-            )
-            step_resp = http_client.post("/step", json=action_dict)
-            step_resp.raise_for_status()
-            step_data = step_resp.json()
+        try:
+            for email in obs["emails"]:
+                action_dict = llm_triage_email(
+                    email_id=email["id"],
+                    subject=email["subject"],
+                    body=email["body"],
+                    sender=email["sender"],
+                )
+                step_resp = http_client.post("/step", json=action_dict)
+                step_resp.raise_for_status()
+                step_data = step_resp.json()
+                step_num += 1
+
+                reward = round(step_data["reward"], 2)
+                rewards.append(reward)
+                episode_done = step_data.get("done", False)
+
+                action_str = (
+                    f"triage(email_id='{action_dict['email_id']}',"
+                    f"category='{action_dict['category']}',"
+                    f"priority='{action_dict['priority']}')"
+                )
+
+                # ── [STEP] ──
+                print(
+                    f"[STEP] step={step_num} action={action_str} "
+                    f"reward={reward:.2f} done={_format_bool(episode_done)} "
+                    f"error=null",
+                    flush=True,
+                )
+
+        except Exception as exc:
+            last_error = str(exc)
             step_num += 1
-            print(f"[STEP] step={step_num} reward={step_data['reward']}", flush=True)
+            rewards.append(0.00)
+            action_str = "error"
+            print(
+                f"[STEP] step={step_num} action={action_str} "
+                f"reward=0.00 done=true "
+                f"error={last_error}",
+                flush=True,
+            )
 
-        grader_resp = http_client.post("/grader")
-        grader_resp.raise_for_status()
-        grader_result = grader_resp.json()
-        task_score = grader_result["score"]
-        print(f"[END] task={task_id} score={task_score} steps={step_num}", flush=True)
-
-        results[task_id] = {
-            "score": task_score,
-            "difficulty": task_id.replace("_triage", ""),
-            "emails_processed": grader_result["emails_graded"],
-            "emails_expected": grader_result["emails_expected"],
-        }
-
-    return {
-        "baseline": "llm_openai_agent",
-        "results": results,
-        "summary": {
-            "easy": results["easy_triage"]["score"],
-            "medium": results["medium_triage"]["score"],
-            "hard": results["hard_triage"]["score"],
-        },
-    }
+        # ── [END] ──
+        success = episode_done and last_error is None
+        rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+        print(
+            f"[END] success={_format_bool(success)} steps={step_num} "
+            f"rewards={rewards_str}",
+            flush=True,
+        )
 
 
 def main():
+    import argparse
+
     parser = argparse.ArgumentParser(description="Run Email Triage LLM inference")
     parser.add_argument(
         "--server",
         type=str,
         default=None,
-        help="Base URL of running server (e.g., http://localhost:7860). If not set, runs directly.",
+        help="Base URL of running server (e.g., http://localhost:7860). "
+        "If not set, runs directly.",
     )
     args = parser.parse_args()
 
-    print("=" * 60, flush=True)
-    print("  Email Triage Environment — LLM Inference", flush=True)
-    print("=" * 60, flush=True)
-    print(f"  API_BASE_URL: {API_BASE_URL}", flush=True)
-    print(f"  MODEL_NAME:   {MODEL_NAME}", flush=True)
-    print(f"  API_KEY:      {'***' + API_KEY[-4:] if len(API_KEY) > 4 else '(not set)'}", flush=True)
-
     if args.server:
-        print(f"\n  Mode: HTTP (server={args.server})", flush=True)
-        results = run_against_server(args.server)
+        run_against_server(args.server)
     else:
-        print("\n  Mode: Direct (no server)", flush=True)
-        results = run_direct()
-
-    print("\n" + json.dumps(results, indent=2), flush=True)
-
-    print("\n" + "=" * 60, flush=True)
-    print("  Baseline Scores", flush=True)
-    print("=" * 60, flush=True)
-    for task, score in results["summary"].items():
-        bar = "█" * int(score * 40) + "░" * (40 - int(score * 40))
-        print(f"  {task:8s} │ {bar} │ {score:.4f}", flush=True)
-    print("=" * 60, flush=True)
-
-    avg = sum(results["summary"].values()) / len(results["summary"])
-    print(f"  Average: {avg:.4f}", flush=True)
-    print(flush=True)
-
-    for task, score in results["summary"].items():
-        assert 0.0 <= score <= 1.0, f"Score out of range for {task}: {score}"
-
-    print("✓ All scores in valid range [0.0, 1.0]", flush=True)
-    print("✓ Inference complete", flush=True)
+        run_direct()
 
 
 if __name__ == "__main__":
