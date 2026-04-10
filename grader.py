@@ -13,6 +13,15 @@ from typing import Dict, List
 
 from models import TriageAction
 
+# Hackathon validator requires scores strictly in (0, 1) — not 0.0 or 1.0
+SCORE_FLOOR = 0.001
+SCORE_CEIL = 0.999
+
+
+def _clamp_score(score: float) -> float:
+    """Clamp a score to the open interval (0, 1) as required by the evaluation harness."""
+    return max(SCORE_FLOOR, min(SCORE_CEIL, score))
+
 
 def grade_classification(action: TriageAction, truth: Dict) -> float:
     """
@@ -216,7 +225,7 @@ def grade_action(action: TriageAction, truth: Dict, difficulty: str = "easy") ->
         "tone": round(tone, 3),
         "content": round(content, 3),
         "escalation": round(escalation, 3),
-        "total_reward": round(total, 3),
+        "total_reward": round(_clamp_score(total), 3),
         "weights": weights,
     }
 
@@ -262,7 +271,7 @@ def grade_episode(
     avg_score = total_score / n_expected if n_expected > 0 else 0.0
 
     return {
-        "score": round(avg_score, 4),
+        "score": round(_clamp_score(avg_score), 4),
         "per_email": per_email,
         "emails_graded": len(per_email),
         "emails_expected": n_expected,
