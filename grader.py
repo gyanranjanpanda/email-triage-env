@@ -220,11 +220,11 @@ def grade_action(action: TriageAction, truth: Dict, difficulty: str = "easy") ->
     )
 
     return {
-        "classification": round(classification, 3),
-        "response_decision": round(response_decision, 3),
-        "tone": round(tone, 3),
-        "content": round(content, 3),
-        "escalation": round(escalation, 3),
+        "classification": round(_clamp_score(classification), 3),
+        "response_decision": round(_clamp_score(response_decision), 3),
+        "tone": round(_clamp_score(tone), 3),
+        "content": round(_clamp_score(content), 3),
+        "escalation": round(_clamp_score(escalation), 3),
         "total_reward": round(_clamp_score(total), 3),
         "weights": weights,
     }

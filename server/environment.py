@@ -19,6 +19,11 @@ from email_data import generate_email_batch
 from grader import grade_action, grade_episode
 
 
+def _clamp(val: float) -> float:
+    """Clamp a score/reward to (0.01, 0.99) for strict (0, 1) compliance."""
+    return max(0.01, min(0.99, val))
+
+
 # ─── Task definitions ─────────────────────────────────────────────────────────
 
 TASKS = {
@@ -119,10 +124,10 @@ class EmailTriageEnvironment:
             emails=emails,
             processed_count=0,
             total_emails=len(emails),
-            current_score=0.0,
+            current_score=0.01,
             feedback=f"Episode started. You have {len(emails)} emails to process. Task: {task['name']}",
             done=False,
-            reward=0.0,
+            reward=0.01,
             metadata={
                 "task_id": task_id,
                 "difficulty": task["difficulty"],
@@ -145,10 +150,10 @@ class EmailTriageEnvironment:
                 emails=[],
                 processed_count=self._state.emails_processed,
                 total_emails=self._state.total_emails,
-                current_score=self._state.total_reward / max(self._state.emails_processed, 1),
+                current_score=_clamp(self._state.total_reward / max(self._state.emails_processed, 1)),
                 feedback="Episode is already complete. Call reset() to start a new episode.",
                 done=True,
-                reward=0.0,
+                reward=0.01,
                 metadata={"episode_id": self._state.episode_id},
             )
 
@@ -164,10 +169,10 @@ class EmailTriageEnvironment:
                 emails=self._get_remaining_emails(),
                 processed_count=self._state.emails_processed,
                 total_emails=self._state.total_emails,
-                current_score=self._state.total_reward / max(self._state.emails_processed, 1),
+                current_score=_clamp(self._state.total_reward / max(self._state.emails_processed, 1)),
                 feedback=f"Error: Email ID '{action.email_id}' not found in current batch.",
                 done=False,
-                reward=-0.1,
+                reward=0.01,
                 metadata={"error": "invalid_email_id"},
             )
 
@@ -178,10 +183,10 @@ class EmailTriageEnvironment:
                 emails=self._get_remaining_emails(),
                 processed_count=self._state.emails_processed,
                 total_emails=self._state.total_emails,
-                current_score=self._state.total_reward / max(self._state.emails_processed, 1),
+                current_score=_clamp(self._state.total_reward / max(self._state.emails_processed, 1)),
                 feedback=f"Email '{action.email_id}' was already processed. Process a different email.",
                 done=False,
-                reward=-0.05,
+                reward=0.01,
                 metadata={"error": "duplicate_action"},
             )
 
@@ -230,10 +235,10 @@ class EmailTriageEnvironment:
             emails=remaining,
             processed_count=self._state.emails_processed,
             total_emails=self._state.total_emails,
-            current_score=self._state.total_reward / max(self._state.emails_processed, 1),
+            current_score=_clamp(self._state.total_reward / max(self._state.emails_processed, 1)),
             feedback=" | ".join(feedback_parts),
             done=self._state.done,
-            reward=grades["total_reward"],
+            reward=_clamp(grades["total_reward"]),
             metadata={
                 "grades": grades,
                 "episode_id": self._state.episode_id,
