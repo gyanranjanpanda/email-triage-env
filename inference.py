@@ -130,6 +130,11 @@ def _format_bool(val: bool) -> str:
     return "true" if val else "false"
 
 
+def _clamp_reward(r: float) -> float:
+    """Clamp reward to (0.01, 0.99) so the formatted value never hits 0.00 or 1.00."""
+    return max(0.01, min(0.99, r))
+
+
 def run_direct():
     """Run LLM-based agent directly against the environment (no server)."""
     from server.environment import EmailTriageEnvironment
@@ -163,7 +168,7 @@ def run_direct():
                 obs = env.step(action)
                 step_num += 1
 
-                reward = round(obs.reward, 2)
+                reward = _clamp_reward(round(obs.reward, 2))
                 rewards.append(reward)
                 episode_done = obs.done
 
@@ -181,11 +186,11 @@ def run_direct():
         except Exception as exc:
             last_error = str(exc)
             step_num += 1
-            rewards.append(0.00)
+            rewards.append(0.01)
             action_str = "error"
             print(
                 f"[STEP] step={step_num} action={action_str} "
-                f"reward=0.00 done=true "
+                f"reward=0.01 done=true "
                 f"error={last_error}",
                 flush=True,
             )
@@ -234,7 +239,7 @@ def run_against_server(base_url: str):
                 step_data = step_resp.json()
                 step_num += 1
 
-                reward = round(step_data["reward"], 2)
+                reward = _clamp_reward(round(step_data["reward"], 2))
                 rewards.append(reward)
                 episode_done = step_data.get("done", False)
 
@@ -255,11 +260,11 @@ def run_against_server(base_url: str):
         except Exception as exc:
             last_error = str(exc)
             step_num += 1
-            rewards.append(0.00)
+            rewards.append(0.01)
             action_str = "error"
             print(
                 f"[STEP] step={step_num} action={action_str} "
-                f"reward=0.00 done=true "
+                f"reward=0.01 done=true "
                 f"error={last_error}",
                 flush=True,
             )

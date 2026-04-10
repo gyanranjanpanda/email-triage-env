@@ -14,8 +14,8 @@ from typing import Dict, List
 from models import TriageAction
 
 # Hackathon validator requires scores strictly in (0, 1) — not 0.0 or 1.0
-SCORE_FLOOR = 0.001
-SCORE_CEIL = 0.999
+SCORE_FLOOR = 0.01
+SCORE_CEIL = 0.99
 
 
 def _clamp_score(score: float) -> float:
