@@ -221,13 +221,15 @@ def run_baseline(env) -> Dict:
 
         # Get grader result
         grader_result = env.get_grader_result()
+        task_score = grader_result.get("task_score", grader_result["score"])
         results[task_id] = {
-            "score": grader_result["score"],
+            "task_score": task_score,
+            "score": task_score,
             "difficulty": task_id.replace("_triage", ""),
             "emails_processed": grader_result["emails_graded"],
             "emails_expected": grader_result["emails_expected"],
             "per_email_scores": [
-                {"email_id": e["email_id"], "score": e.get("total_reward", 0.0)}
+                {"email_id": e["email_id"], "score": e.get("total_reward", 0.01)}
                 for e in grader_result.get("per_email", [])
             ],
         }

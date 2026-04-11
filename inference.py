@@ -198,9 +198,10 @@ def run_direct():
         # ── [END] ──
         success = episode_done and last_error is None
         rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+        task_score = _clamp_reward(sum(rewards) / len(rewards)) if rewards else 0.01
         print(
             f"[END] success={_format_bool(success)} steps={step_num} "
-            f"rewards={rewards_str}",
+            f"rewards={rewards_str} score={task_score:.2f} task_score={task_score:.2f}",
             flush=True,
         )
 
@@ -272,9 +273,10 @@ def run_against_server(base_url: str):
         # ── [END] ──
         success = episode_done and last_error is None
         rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+        task_score = _clamp_reward(sum(rewards) / len(rewards)) if rewards else 0.01
         print(
             f"[END] success={_format_bool(success)} steps={step_num} "
-            f"rewards={rewards_str}",
+            f"rewards={rewards_str} score={task_score:.2f} task_score={task_score:.2f}",
             flush=True,
         )
 

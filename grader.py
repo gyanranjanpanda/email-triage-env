@@ -269,9 +269,11 @@ def grade_episode(
     # Normalize by number of expected emails (not just actions submitted)
     n_expected = len(truths)
     avg_score = total_score / n_expected if n_expected > 0 else 0.0
+    clamped_score = round(_clamp_score(avg_score), 4)
 
     return {
-        "score": round(_clamp_score(avg_score), 4),
+        "task_score": clamped_score,
+        "score": clamped_score,
         "per_email": per_email,
         "emails_graded": len(per_email),
         "emails_expected": n_expected,
