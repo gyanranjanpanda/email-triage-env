@@ -19,14 +19,17 @@ environment:
       name: "Basic Email Triage"
       difficulty: easy
       description: "Classify and respond to 5 straightforward emails"
+      grader: "grader:grade_episode"
     - id: medium_triage
       name: "Intermediate Email Triage"
       difficulty: medium
       description: "Process 7 emails with ambiguous cases and complaints"
+      grader: "grader:grade_episode"
     - id: hard_triage
       name: "Advanced Email Triage"
       difficulty: hard
       description: "Handle 10 emails with legal, PR, and high-stakes scenarios"
+      grader: "grader:grade_episode"
 
   action_space:
     type: object
